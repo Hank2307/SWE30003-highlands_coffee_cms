@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Order - HC-CMS</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <span class="logo-icon">☕</span>
+                <h1>Highlands Coffee CMS</h1>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/" class="nav-link">Dashboard</a>
+            <a href="/create-order.html" class="nav-link active">Create Order</a>
+            <a href="/orders.html" class="nav-link">Orders</a>
+            <a href="/inventory.html" class="nav-link">Inventory</a>
+            <a href="/loyalty.html" class="nav-link">Loyalty</a>
+            <a href="/customers.html" class="nav-link">Customers</a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">➕ Create New Order</h2>
+                <p class="card-subtitle">Fill in the order details below</p>
+            </div>
+
+            <!-- Alert Messages -->
+            <div id="alertContainer"></div>
+
+            <!-- Order Form -->
+            <form id="orderForm">
+                <!-- Customer & Branch Selection -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label required" for="customerId">Customer</label>
+                        <select class="form-select" id="customerId" name="customerId" required>
+                            <option value="">Select Customer...</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label required" for="branchId">Branch</label>
+                        <select class="form-select" id="branchId" name="branchId" required>
+                            <option value="">Select Branch...</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Loyalty Points Section -->
+                <div class="form-group">
+                    <div class="card" style="background-color: #f8f9fa;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong>Loyalty Points Available:</strong>
+                                <span id="loyaltyPointsDisplay">-</span>
+                                <span class="text-muted" id="loyaltyValueDisplay"></span>
+                            </div>
+                            <div>
+                                <label class="form-label" for="loyaltyPointsToRedeem">Redeem Points:</label>
+                                <input 
+                                    type="number" 
+                                    class="form-input" 
+                                    id="loyaltyPointsToRedeem" 
+                                    name="loyaltyPointsToRedeem" 
+                                    min="0" 
+                                    max="0"
+                                    value="0"
+                                    style="width: 150px; display: inline-block;"
+                                >
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Menu Items -->
+                <div class="form-group">
+                    <label class="form-label required">Order Items</label>
+                    <div id="menuItemsContainer" class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading menu items...</p>
+                    </div>
+                </div>
+
+                <!-- Order Summary -->
+                <div class="card" style="background-color: #f8f9fa; margin-top: 2rem;">
+                    <h3 style="margin-bottom: 1rem;">Order Summary</h3>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                        <span>Subtotal:</span>
+                        <strong id="subtotalDisplay">0 ₫</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; color: #28a745;">
+                        <span>Loyalty Discount:</span>
+                        <strong id="discountDisplay">0 ₫</strong>
+                    </div>
+                    <hr>
+                    <div style="display: flex; justify-content: space-between; font-size: 1.3rem;">
+                        <span><strong>Total:</strong></span>
+                        <strong style="color: #c7a17a;" id="totalDisplay">0 ₫</strong>
+                    </div>
+                </div>
+
+                <!-- Payment Method -->
+                <div class="form-group">
+                    <label class="form-label required">Payment Method</label>
+                    <div class="form-row">
+                        <label class="payment-option">
+                            <input type="radio" name="paymentType" value="cash" required>
+                            <span>💵 Cash</span>
+                        </label>
+                        <label class="payment-option">
+                            <input type="radio" name="paymentType" value="card">
+                            <span>💳 Card</span>
+                        </label>
+                        <label class="payment-option">
+                            <input type="radio" name="paymentType" value="ewallet">
+                            <span>📱 E-Wallet</span>
+                        </label>
+                        <label class="payment-option">
+                            <input type="radio" name="paymentType" value="qr">
+                            <span>📲 QR Code</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Payment Details (Dynamic) -->
+                <div id="paymentDetailsContainer"></div>
+
+                <!-- Submit Buttons -->
+                <div class="btn-group">
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        ✅ Place Order
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="window.location.href='/'">
+                        ❌ Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2024 Highlands Coffee Management System. All rights reserved.</p>
+    </footer>
+
+    <style>
+        .payment-option {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 1rem;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .payment-option:hover {
+            border-color: #c7a17a;
+            background-color: #f5e6d3;
+        }
+        .payment-option input[type="radio"]:checked + span {
+            color: #c7a17a;
+            font-weight: 600;
+        }
+        .menu-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+        }
+        .menu-item:hover {
+            background-color: #f8f9fa;
+        }
+        .menu-item-info {
+            flex: 1;
+        }
+        .menu-item-quantity {
+            width: 100px;
+        }
+    </style>
+
+    <script>
+        let customers = [];
+        let branches = [];
+        let menuItems = [];
+        let selectedCustomer = null;
+        let loyaltyPoints = 0;
+
+        // Format currency
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            }).format(amount);
+        }
+
+        // Show alert
+        function showAlert(message, type = 'success') {
+            const alertContainer = document.getElementById('alertContainer');
+            alertContainer.innerHTML = `
+                <div class="alert alert-${type}">
+                    <strong>${type === 'error' ? 'Error:' : 'Success:'}</strong> ${message}
+                </div>
+            `;
+            setTimeout(() => {
+                alertContainer.innerHTML = '';
+            }, 5000);
+        }
+
+        // Load customers and branches
+        async function loadInitialData() {
+            try {
+                // Load customers
+                const customersRes = await fetch('/api/customers');
+                const customersData = await customersRes.json();
+                customers = customersData.customers || [];
+
+                const customerSelect = document.getElementById('customerId');
+                customers.forEach(customer => {
+                    const option = document.createElement('option');
+                    option.value = customer.id;
+                    option.textContent = `${customer.name} (${customer.email || 'No email'})`;
+                    customerSelect.appendChild(option);
+                });
+
+                // Load branches
+                const branchesRes = await fetch('/api/branches');
+                const branchesData = await branchesRes.json();
+                branches = branchesData.branches || [];
+
+                const branchSelect = document.getElementById('branchId');
+                branches.forEach(branch => {
+                    const option = document.createElement('option');
+                    option.value = branch.id;
+                    option.textContent = branch.name;
+                    branchSelect.appendChild(option);
+                });
+
+            } catch (error) {
+                console.error('Error loading initial data:', error);
+                showAlert('Failed to load initial data', 'error');
+            }
+        }
+
+        // Load menu items for selected branch
+        async function loadMenuItems(branchId) {
+            try {
+                const response = await fetch(`/api/inventory/branch/${branchId}`);
+                const data = await response.json();
+
+                const container = document.getElementById('menuItemsContainer');
+                menuItems = data.inventory || [];
+
+                if (menuItems.length === 0) {
+                    container.innerHTML = '<p class="text-muted">No items available for this branch</p>';
+                    return;
+                }
+
+                container.innerHTML = menuItems.map(item => `
+                    <div class="menu-item">
+                        <div class="menu-item-info">
+                            <strong>${item.menu_item_name}</strong>
+                            <div class="text-muted">${formatCurrency(item.price)}</div>
+                            <small class="text-muted">Stock: ${item.quantity} available</small>
+                        </div>
+                        <input 
+                            type="number" 
+                            class="form-input menu-item-quantity" 
+                            id="item-${item.menu_item_id}"
+                            min="0" 
+                            max="${item.quantity}"
+                            value="0"
+                            data-item-id="${item.menu_item_id}"
+                            data-price="${item.price}"
+                            onchange="calculateTotal()"
+                        >
+                    </div>
+                `).join('');
+
+            } catch (error) {
+                console.error('Error loading menu items:', error);
+                showAlert('Failed to load menu items', 'error');
+            }
+        }
+
+        // Load loyalty points for selected customer
+        async function loadLoyaltyPoints(customerId) {
+            try {
+                const response = await fetch(`/api/loyalty/customer/${customerId}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    loyaltyPoints = data.balance.points;
+                    const value = data.balance.discountValue;
+                    
+                    document.getElementById('loyaltyPointsDisplay').textContent = loyaltyPoints;
+                    document.getElementById('loyaltyValueDisplay').textContent = `(${formatCurrency(value)} discount)`;
+                    document.getElementById('loyaltyPointsToRedeem').max = loyaltyPoints;
+                }
+            } catch (error) {
+                console.error('Error loading loyalty points:', error);
+            }
+        }
+
+        // Calculate order total
+        function calculateTotal() {
+            let subtotal = 0;
+
+            menuItems.forEach(item => {
+                const input = document.getElementById(`item-${item.menu_item_id}`);
+                if (input && parseInt(input.value) > 0) {
+                    subtotal += parseInt(input.value) * item.price;
+                }
+            });
+
+            const pointsToRedeem = parseInt(document.getElementById('loyaltyPointsToRedeem').value) || 0;
+            const discount = pointsToRedeem * 1000; // Each point = 1,000 VND
+            const total = Math.max(0, subtotal - discount);
+
+            document.getElementById('subtotalDisplay').textContent = formatCurrency(subtotal);
+            document.getElementById('discountDisplay').textContent = formatCurrency(discount);
+            document.getElementById('totalDisplay').textContent = formatCurrency(total);
+        }
+
+        // Show payment details fields based on selected payment method
+        document.querySelectorAll('input[name="paymentType"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                const container = document.getElementById('paymentDetailsContainer');
+                const paymentType = this.value;
+
+                if (paymentType === 'cash') {
+                    container.innerHTML = `
+                        <div class="form-group">
+                            <label class="form-label required" for="receivedAmount">Amount Received</label>
+                            <input type="number" class="form-input" id="receivedAmount" name="receivedAmount" min="0" step="1000" required>
+                        </div>
+                    `;
+                } else if (paymentType === 'card') {
+                    container.innerHTML = `
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label required" for="cardNumber">Card Number</label>
+                                <input type="text" class="form-input" id="cardNumber" name="cardNumber" placeholder="1234 5678 9012 3456" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label required" for="cardHolder">Card Holder</label>
+                                <input type="text" class="form-input" id="cardHolder" name="cardHolder" placeholder="NGUYEN VAN A" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label required" for="cvv">CVV</label>
+                                <input type="text" class="form-input" id="cvv" name="cvv" placeholder="123" maxlength="3" required>
+                            </div>
+                        </div>
+                    `;
+                } else if (paymentType === 'ewallet') {
+                    container.innerHTML = `
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label required" for="walletType">Wallet Type</label>
+                                <select class="form-select" id="walletType" name="walletType" required>
+                                    <option value="Momo">Momo</option>
+                                    <option value="ZaloPay">ZaloPay</option>
+                                    <option value="ViettelPay">ViettelPay</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label required" for="phoneNumber">Phone Number</label>
+                                <input type="tel" class="form-input" id="phoneNumber" name="phoneNumber" placeholder="0901234567" required>
+                            </div>
+                        </div>
+                    `;
+                } else if (paymentType === 'qr') {
+                    container.innerHTML = `
+                        <div class="alert alert-info">
+                            QR code will be automatically generated for this payment.
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = '';
+                }
+            });
+        });
+
+        // Event listeners
+        document.getElementById('customerId').addEventListener('change', function() {
+            if (this.value) {
+                loadLoyaltyPoints(this.value);
+            }
+        });
+
+        document.getElementById('branchId').addEventListener('change', function() {
+            if (this.value) {
+                loadMenuItems(this.value);
+            }
+        });
+
+        document.getElementById('loyaltyPointsToRedeem').addEventListener('input', calculateTotal);
+
+        // Form submission
+        document.getElementById('orderForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const formData = new FormData(this);
+            const customerId = formData.get('customerId');
+            const branchId = formData.get('branchId');
+            const paymentType = formData.get('paymentType');
+            const loyaltyPointsToRedeem = parseInt(formData.get('loyaltyPointsToRedeem')) || 0;
+
+            // Collect order items
+            const items = [];
+            menuItems.forEach(item => {
+                const input = document.getElementById(`item-${item.menu_item_id}`);
+                const quantity = parseInt(input.value) || 0;
+                if (quantity > 0) {
+                    items.push({
+                        menuItemId: item.menu_item_id,
+                        quantity: quantity
+                    });
+                }
+            });
+
+            if (items.length === 0) {
+                showAlert('Please select at least one item', 'error');
+                return;
+            }
+
+            // Collect payment details
+            const paymentDetails = {};
+            if (paymentType === 'cash') {
+                paymentDetails.receivedAmount = parseFloat(formData.get('receivedAmount'));
+            } else if (paymentType === 'card') {
+                paymentDetails.cardNumber = formData.get('cardNumber');
+                paymentDetails.cardHolder = formData.get('cardHolder');
+                paymentDetails.cvv = formData.get('cvv');
+            } else if (paymentType === 'ewallet') {
+                paymentDetails.walletType = formData.get('walletType');
+                paymentDetails.phoneNumber = formData.get('phoneNumber');
+            }
+
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = '⏳ Processing...';
+
+            try {
+                const response = await fetch('/api/orders/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        customerId: parseInt(customerId),
+                        branchId: parseInt(branchId),
+                        items: items,
+                        paymentType: paymentType,
+                        paymentDetails: paymentDetails,
+                        loyaltyPointsToRedeem: loyaltyPointsToRedeem
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert(`✅ Order #${data.order.id} created successfully! Redirecting...`, 'success');
+                    
+                    // Show success details
+                    const alertContainer = document.getElementById('alertContainer');
+                    alertContainer.innerHTML = `
+                        <div class="alert alert-success">
+                            <h4>✅ Order Created Successfully!</h4>
+                            <p><strong>Order ID:</strong> #${data.order.id}</p>
+                            <p><strong>Total Amount:</strong> ${formatCurrency(data.order.totalAmount)}</p>
+                            <p><strong>Payment Status:</strong> ${data.payment.message}</p>
+                            ${data.loyalty.pointsAdded > 0 ? `<p><strong>Loyalty Points Earned:</strong> +${data.loyalty.pointsAdded} points</p>` : ''}
+                            ${data.loyaltyDiscount > 0 ? `<p><strong>Loyalty Discount Applied:</strong> ${formatCurrency(data.loyaltyDiscount)}</p>` : ''}
+                            <p class="mt-2">Redirecting to orders page in 3 seconds...</p>
+                        </div>
+                    `;
+                    
+                    // Scroll to top to see the message
+                    window.scrollTo(0, 0);
+                    
+                    setTimeout(() => {
+                        window.location.href = '/orders.html';
+                    }, 3000);
+                } else {
+                    showAlert(data.error || 'Failed to create order', 'error');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '✅ Place Order';
+                }
+            } catch (error) {
+                console.error('Error creating order:', error);
+                showAlert('Failed to create order', 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = '✅ Place Order';
+            }
+        });
+
+        // Load initial data on page load
+        document.addEventListener('DOMContentLoaded', loadInitialData);
+    </script>
+</body>
+</html>

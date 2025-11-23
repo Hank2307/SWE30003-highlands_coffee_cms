@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orders - HC-CMS</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <span class="logo-icon">☕</span>
+                <h1>Highlands Coffee CMS</h1>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/" class="nav-link">Dashboard</a>
+            <a href="/create-order.html" class="nav-link">Create Order</a>
+            <a href="/orders.html" class="nav-link active">Orders</a>
+            <a href="/inventory.html" class="nav-link">Inventory</a>
+            <a href="/loyalty.html" class="nav-link">Loyalty</a>
+            <a href="/customers.html" class="nav-link">Customers</a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">📋 All Orders</h2>
+                <p class="card-subtitle">View and manage customer orders</p>
+            </div>
+
+            <!-- Filter Section -->
+            <div class="form-row" style="margin-bottom: 1.5rem;">
+                <div class="form-group">
+                    <label class="form-label" for="filterStatus">Filter by Status</label>
+                    <select class="form-select" id="filterStatus" onchange="loadOrders()">
+                        <option value="">All Statuses</option>
+                        <option value="pending">Pending</option>
+                        <option value="confirmed">Confirmed</option>
+                        <option value="preparing">Preparing</option>
+                        <option value="ready">Ready</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="filterBranch">Filter by Branch</label>
+                    <select class="form-select" id="filterBranch" onchange="loadOrders()">
+                        <option value="">All Branches</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Orders Table -->
+            <div id="ordersContainer">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading orders...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Order Details Modal -->
+        <div id="orderDetailsModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Order Details</h3>
+                    <button class="modal-close" onclick="closeModal()">&times;</button>
+                </div>
+                <div id="orderDetailsContent"></div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2024 Highlands Coffee Management System. All rights reserved.</p>
+    </footer>
+
+    <script>
+        let allOrders = [];
+        let branches = [];
+
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            }).format(amount);
+        }
+
+        function getStatusColor(status) {
+            const colors = {
+                'pending': 'warning',
+                'confirmed': 'info',
+                'preparing': 'info',
+                'ready': 'success',
+                'completed': 'success',
+                'cancelled': 'danger'
+            };
+            return colors[status] || 'secondary';
+        }
+
+        async function loadBranches() {
+            try {
+                const response = await fetch('/api/branches');
+                const data = await response.json();
+                branches = data.branches || [];
+
+                const select = document.getElementById('filterBranch');
+                branches.forEach(branch => {
+                    const option = document.createElement('option');
+                    option.value = branch.id;
+                    option.textContent = branch.name;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading branches:', error);
+            }
+        }
+
+        async function loadOrders() {
+            try {
+                const response = await fetch('/api/orders');
+                const data = await response.json();
+
+                const container = document.getElementById('ordersContainer');
+
+                if (!data.success || data.orders.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📋</div>
+                            <div class="empty-state-text">No orders found</div>
+                            <a href="/create-order.html" class="btn btn-primary">Create First Order</a>
+                        </div>
+                    `;
+                    return;
+                }
+
+                allOrders = data.orders;
+
+                // Apply filters
+                const statusFilter = document.getElementById('filterStatus').value;
+                const branchFilter = document.getElementById('filterBranch').value;
+
+                let filteredOrders = allOrders;
+                if (statusFilter) {
+                    filteredOrders = filteredOrders.filter(o => o.order_status === statusFilter);
+                }
+                if (branchFilter) {
+                    filteredOrders = filteredOrders.filter(o => o.branch_id == branchFilter);
+                }
+
+                if (filteredOrders.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">🔍</div>
+                            <div class="empty-state-text">No orders match the selected filters</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = `
+                    <div class="table-container">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Order ID</th>
+                                    <th>Customer</th>
+                                    <th>Branch</th>
+                                    <th>Total</th>
+                                    <th>Payment</th>
+                                    <th>Payment Status</th>
+                                    <th>Order Status</th>
+                                    <th>Date</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${filteredOrders.map(order => `
+                                    <tr>
+                                        <td><strong>#${order.id}</strong></td>
+                                        <td>${order.customer_name}</td>
+                                        <td>${order.branch_name}</td>
+                                        <td><strong>${formatCurrency(order.total_amount)}</strong></td>
+                                        <td><span class="badge badge-info">${order.payment_type}</span></td>
+                                        <td><span class="badge badge-${order.payment_status === 'completed' ? 'success' : 'warning'}">${order.payment_status}</span></td>
+                                        <td><span class="badge badge-${getStatusColor(order.order_status)}">${order.order_status}</span></td>
+                                        <td>${new Date(order.created_at).toLocaleString()}</td>
+                                        <td>
+                                            <div class="action-buttons">
+                                                <button class="btn btn-sm btn-info" onclick="viewOrderDetails(${order.id})">👁️ View</button>
+                                                ${order.order_status !== 'completed' && order.order_status !== 'cancelled' ? 
+                                                    `<button class="btn btn-sm btn-success" onclick="updateOrderStatus(${order.id}, 'completed')">✅ Complete</button>` : 
+                                                    ''
+                                                }
+                                                ${order.order_status !== 'cancelled' && order.order_status !== 'completed' ? 
+                                                    `<button class="btn btn-sm btn-danger" onclick="cancelOrder(${order.id})">❌ Cancel</button>` : 
+                                                    ''
+                                                }
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3">
+                        <p class="text-muted">Showing ${filteredOrders.length} of ${allOrders.length} orders</p>
+                    </div>
+                `;
+
+            } catch (error) {
+                document.getElementById('ordersContainer').innerHTML = `
+                    <div class="alert alert-error">
+                        <strong>Error:</strong> Failed to load orders
+                    </div>
+                `;
+                console.error('Error loading orders:', error);
+            }
+        }
+
+        async function viewOrderDetails(orderId) {
+            try {
+                const response = await fetch(`/api/orders/${orderId}`);
+                const data = await response.json();
+
+                if (!data.success) {
+                    alert('Failed to load order details');
+                    return;
+                }
+
+                const order = data.order;
+                const modal = document.getElementById('orderDetailsModal');
+                const content = document.getElementById('orderDetailsContent');
+
+                content.innerHTML = `
+                    <div style="margin-bottom: 1.5rem;">
+                        <h4>Order #${order.id}</h4>
+                        <p class="text-muted">Created: ${new Date(order.createdAt).toLocaleString()}</p>
+                    </div>
+
+                    <div style="margin-bottom: 1.5rem;">
+                        <strong>Customer ID:</strong> ${order.customerId}<br>
+                        <strong>Branch ID:</strong> ${order.branchId}<br>
+                        <strong>Payment Type:</strong> ${order.paymentType}<br>
+                        <strong>Order Status:</strong>
+                        <span class="badge badge-${getStatusColor(order.orderStatus)}">${order.orderStatus}</span><br>
+                        <strong>Payment Status:</strong>
+                        <span class="badge badge-${order.paymentStatus === 'completed' ? 'success' : 'warning'}">${order.paymentStatus}</span>
+                    </div>
+
+                    <h5>Order Items:</h5>
+                    ${order.orderItems && order.orderItems.length > 0 ? `
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Item</th>
+                                    <th>Quantity</th>
+                                    <th>Unit Price</th>
+                                    <th>Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${order.orderItems.map(item => `
+                                    <tr>
+                                        <td>${item.menuItemName || 'Item #' + item.menuItemId}</td>
+                                        <td>${item.quantity}</td>
+                                        <td>${formatCurrency(item.unitPrice)}</td>
+                                        <td>${formatCurrency(item.subtotal)}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    ` : '<p>No items found</p>'}
+
+                    <div style="text-align: right; margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #dee2e6;">
+                        <h4>Total: ${formatCurrency(order.totalAmount)}</h4>
+                    </div>
+
+                    <div style="margin-top: 1.5rem;">
+                        <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+                    </div>
+                `;
+
+                modal.classList.remove('hidden');
+            } catch (error) {
+                console.error('Error loading order details:', error);
+                alert('Failed to load order details');
+            }
+        }
+
+        async function updateOrderStatus(orderId, newStatus) {
+            if (!confirm(`Are you sure you want to mark this order as ${newStatus}?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/orders/${orderId}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('Order status updated successfully');
+                    loadOrders();
+                } else {
+                    alert('Failed to update order status: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error updating order status:', error);
+                alert('Failed to update order status');
+            }
+        }
+
+        async function cancelOrder(orderId) {
+            if (!confirm('Are you sure you want to cancel this order?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/orders/${orderId}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('Order cancelled successfully');
+                    loadOrders();
+                } else {
+                    alert('Failed to cancel order: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error cancelling order:', error);
+                alert('Failed to cancel order');
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('orderDetailsModal').classList.add('hidden');
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('orderDetailsModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadBranches();
+            loadOrders();
+        });
+    </script>
+</body>
+</html>

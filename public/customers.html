@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customers - HC-CMS</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <span class="logo-icon">☕</span>
+                <h1>Highlands Coffee CMS</h1>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/" class="nav-link">Dashboard</a>
+            <a href="/create-order.html" class="nav-link">Create Order</a>
+            <a href="/orders.html" class="nav-link">Orders</a>
+            <a href="/inventory.html" class="nav-link">Inventory</a>
+            <a href="/loyalty.html" class="nav-link">Loyalty</a>
+            <a href="/customers.html" class="nav-link active">Customers</a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Alert Container -->
+        <div id="alertContainer"></div>
+
+        <!-- Customer Management -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">👥 Customer Management</h2>
+                <p class="card-subtitle">Manage customer information and accounts</p>
+            </div>
+
+            <div class="btn-group" style="margin-bottom: 1.5rem;">
+                <button class="btn btn-primary" onclick="openAddCustomerModal()">➕ Add New Customer</button>
+            </div>
+
+            <!-- Customers Table -->
+            <div id="customersContainer">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading customers...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add/Edit Customer Modal -->
+        <div id="customerModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modalTitle">Add New Customer</h3>
+                    <button class="modal-close" onclick="closeCustomerModal()">&times;</button>
+                </div>
+                <form id="customerForm">
+                    <input type="hidden" id="customerId" name="customerId">
+                    
+                    <div class="form-group">
+                        <label class="form-label required" for="customerName">Full Name</label>
+                        <input type="text" class="form-input" id="customerName" name="name" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="customerEmail">Email</label>
+                        <input type="email" class="form-input" id="customerEmail" name="email" placeholder="customer@example.com">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="customerPhone">Phone Number</label>
+                        <input type="tel" class="form-input" id="customerPhone" name="phone" placeholder="0901234567">
+                    </div>
+
+                    <div class="btn-group">
+                        <button type="submit" class="btn btn-success" id="submitBtn">✅ Save Customer</button>
+                        <button type="button" class="btn btn-secondary" onclick="closeCustomerModal()">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Customer Details Modal -->
+        <div id="detailsModal" class="modal hidden">
+            <div class="modal-content" style="max-width: 700px;">
+                <div class="modal-header">
+                    <h3>Customer Details</h3>
+                    <button class="modal-close" onclick="closeDetailsModal()">&times;</button>
+                </div>
+                <div id="customerDetailsContent"></div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2024 Highlands Coffee Management System. All rights reserved.</p>
+    </footer>
+
+    <style>
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .info-label {
+            font-weight: 600;
+            color: #6c757d;
+        }
+    </style>
+
+    <script>
+        let allCustomers = [];
+        let isEditMode = false;
+
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            }).format(amount);
+        }
+
+        function showAlert(message, type = 'success') {
+            const alertContainer = document.getElementById('alertContainer');
+            alertContainer.innerHTML = `
+                <div class="alert alert-${type}">
+                    <strong>${type === 'error' ? 'Error:' : 'Success:'}</strong> ${message}
+                </div>
+            `;
+            setTimeout(() => {
+                alertContainer.innerHTML = '';
+            }, 5000);
+        }
+
+        async function loadCustomers() {
+            try {
+                const response = await fetch('/api/customers');
+                const data = await response.json();
+
+                const container = document.getElementById('customersContainer');
+
+                if (!data.success || data.customers.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">👥</div>
+                            <div class="empty-state-text">No customers found</div>
+                            <button class="btn btn-primary" onclick="openAddCustomerModal()">Add First Customer</button>
+                        </div>
+                    `;
+                    return;
+                }
+
+                allCustomers = data.customers;
+
+                container.innerHTML = `
+                    <div class="table-container">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Phone</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${allCustomers.map(customer => `
+                                    <tr>
+                                        <td><strong>#${customer.id}</strong></td>
+                                        <td>${customer.name}</td>
+                                        <td>${customer.email || '-'}</td>
+                                        <td>${customer.phone || '-'}</td>
+                                        <td>
+                                            <div style="display: flex; gap: 0.5rem;">
+                                                <button class="btn btn-sm btn-info" onclick="viewCustomerDetails(${customer.id})">👁️ View</button>
+                                                <button class="btn btn-sm btn-primary" onclick="openEditCustomerModal(${customer.id})">✏️ Edit</button>
+                                                <button class="btn btn-sm btn-danger" onclick="deleteCustomer(${customer.id})">🗑️ Delete</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3">
+                        <p class="text-muted">Total Customers: ${allCustomers.length}</p>
+                    </div>
+                `;
+
+            } catch (error) {
+                document.getElementById('customersContainer').innerHTML = `
+                    <div class="alert alert-error">
+                        <strong>Error:</strong> Failed to load customers
+                    </div>
+                `;
+                console.error('Error loading customers:', error);
+            }
+        }
+
+        function openAddCustomerModal() {
+            isEditMode = false;
+            document.getElementById('modalTitle').textContent = 'Add New Customer';
+            document.getElementById('customerId').value = '';
+            document.getElementById('customerForm').reset();
+            document.getElementById('customerModal').classList.remove('hidden');
+        }
+
+        function openEditCustomerModal(customerId) {
+            isEditMode = true;
+            const customer = allCustomers.find(c => c.id === customerId);
+            
+            if (!customer) return;
+
+            document.getElementById('modalTitle').textContent = 'Edit Customer';
+            document.getElementById('customerId').value = customer.id;
+            document.getElementById('customerName').value = customer.name;
+            document.getElementById('customerEmail').value = customer.email || '';
+            document.getElementById('customerPhone').value = customer.phone || '';
+            
+            document.getElementById('customerModal').classList.remove('hidden');
+        }
+
+        function closeCustomerModal() {
+            document.getElementById('customerModal').classList.add('hidden');
+        }
+
+        async function viewCustomerDetails(customerId) {
+            try {
+                // Get customer info
+                const customerRes = await fetch(`/api/customers/${customerId}`);
+                const customerData = await customerRes.json();
+
+                if (!customerData.success) {
+                    alert('Failed to load customer details');
+                    return;
+                }
+
+                const customer = customerData.customer;
+
+                // Get loyalty info
+                let loyaltyInfo = null;
+                try {
+                    const loyaltyRes = await fetch(`/api/loyalty/customer/${customerId}`);
+                    const loyaltyData = await loyaltyRes.json();
+                    if (loyaltyData.success) {
+                        loyaltyInfo = loyaltyData.balance;
+                    }
+                } catch (e) {
+                    console.log('No loyalty data');
+                }
+
+                // Get customer orders
+                let ordersInfo = [];
+                try {
+                    const ordersRes = await fetch(`/api/orders/customer/${customerId}`);
+                    const ordersData = await ordersRes.json();
+                    if (ordersData.success) {
+                        ordersInfo = ordersData.orders;
+                    }
+                } catch (e) {
+                    console.log('No orders data');
+                }
+
+                const content = document.getElementById('customerDetailsContent');
+                
+                content.innerHTML = `
+                    <div style="margin-bottom: 2rem;">
+                        <h4>${customer.name}</h4>
+                        
+                        <div class="info-row">
+                            <span class="info-label">Customer ID:</span>
+                            <span>#${customer.id}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Email:</span>
+                            <span>${customer.email || 'Not provided'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Phone:</span>
+                            <span>${customer.phone || 'Not provided'}</span>
+                        </div>
+                    </div>
+
+                    ${loyaltyInfo ? `
+                        <div style="margin-bottom: 2rem;">
+                            <h5>🎁 Loyalty Information</h5>
+                            <div class="info-row">
+                                <span class="info-label">Points:</span>
+                                <span><strong>${loyaltyInfo.points}</strong></span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Tier:</span>
+                                <span><span class="badge badge-warning">${loyaltyInfo.tier}</span></span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Discount Value:</span>
+                                <span>${formatCurrency(loyaltyInfo.discountValue)}</span>
+                            </div>
+                        </div>
+                    ` : '<p class="text-muted">No loyalty information</p>'}
+
+                    <div style="margin-bottom: 1.5rem;">
+                        <h5>📋 Order History</h5>
+                        ${ordersInfo.length > 0 ? `
+                            <div class="table-container">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Order ID</th>
+                                            <th>Branch</th>
+                                            <th>Total</th>
+                                            <th>Status</th>
+                                            <th>Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${ordersInfo.slice(0, 5).map(order => `
+                                            <tr>
+                                                <td>#${order.id}</td>
+                                                <td>${order.branch_name}</td>
+                                                <td>${formatCurrency(order.total_amount)}</td>
+                                                <td><span class="badge badge-success">${order.order_status}</span></td>
+                                                <td>${new Date(order.created_at).toLocaleDateString()}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                            ${ordersInfo.length > 5 ? `<p class="text-muted">Showing 5 of ${ordersInfo.length} orders</p>` : ''}
+                        ` : '<p class="text-muted">No orders yet</p>'}
+                    </div>
+
+                    <div style="margin-top: 1.5rem;">
+                        <button class="btn btn-secondary" onclick="closeDetailsModal()">Close</button>
+                    </div>
+                `;
+
+                document.getElementById('detailsModal').classList.remove('hidden');
+
+            } catch (error) {
+                console.error('Error loading customer details:', error);
+                alert('Failed to load customer details: ' + error.message);
+            }
+        }
+
+        function closeDetailsModal() {
+            document.getElementById('detailsModal').classList.add('hidden');
+        }
+
+        document.getElementById('customerForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const formData = new FormData(this);
+            const customerId = document.getElementById('customerId').value;
+            
+            const customerData = {
+                name: formData.get('name'),
+                email: formData.get('email'),
+                phone: formData.get('phone')
+            };
+
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+
+            try {
+                const url = isEditMode ? `/api/customers/${customerId}` : '/api/customers';
+                const method = isEditMode ? 'PUT' : 'POST';
+
+                const response = await fetch(url, {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(customerData)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    closeCustomerModal();
+                    loadCustomers();
+                } else {
+                    showAlert(data.error || 'Failed to save customer', 'error');
+                }
+            } catch (error) {
+                console.error('Error saving customer:', error);
+                showAlert('Failed to save customer', 'error');
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+
+        async function deleteCustomer(customerId) {
+            if (!confirm('Are you sure you want to delete this customer? This action cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/customers/${customerId}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert('Customer deleted successfully', 'success');
+                    loadCustomers();
+                } else {
+                    showAlert(data.error || 'Failed to delete customer', 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting customer:', error);
+                showAlert('Failed to delete customer', 'error');
+            }
+        }
+
+        // Close modals when clicking outside
+        document.getElementById('customerModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeCustomerModal();
+            }
+        });
+
+        document.getElementById('detailsModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeDetailsModal();
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', loadCustomers);
+    </script>
+</body>
+</html>

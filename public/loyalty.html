@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loyalty Program - HC-CMS</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <span class="logo-icon">☕</span>
+                <h1>Highlands Coffee CMS</h1>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/" class="nav-link">Dashboard</a>
+            <a href="/create-order.html" class="nav-link">Create Order</a>
+            <a href="/orders.html" class="nav-link">Orders</a>
+            <a href="/inventory.html" class="nav-link">Inventory</a>
+            <a href="/loyalty.html" class="nav-link active">Loyalty</a>
+            <a href="/customers.html" class="nav-link">Customers</a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Alert Container -->
+        <div id="alertContainer"></div>
+
+        <!-- Loyalty Program Overview -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">🎁 Loyalty Program</h2>
+                <p class="card-subtitle">Manage customer loyalty points and rewards</p>
+            </div>
+            
+            <!-- Loyalty Tiers Info -->
+            <div class="grid grid-3">
+                <div class="card" style="background: linear-gradient(135deg, #cd7f32, #b87333); color: white;">
+                    <h3>🥉 Bronze Tier</h3>
+                    <p>0 - 199 points</p>
+                    <small>Entry level membership</small>
+                </div>
+                <div class="card" style="background: linear-gradient(135deg, #c0c0c0, #a8a8a8); color: white;">
+                    <h3>🥈 Silver Tier</h3>
+                    <p>200 - 499 points</p>
+                    <small>Regular customer benefits</small>
+                </div>
+                <div class="card" style="background: linear-gradient(135deg, #ffd700, #ffed4e); color: #333;">
+                    <h3>🥇 Gold Tier</h3>
+                    <p>500+ points</p>
+                    <small>Premium rewards & perks</small>
+                </div>
+            </div>
+
+            <div class="alert alert-info" style="margin-top: 1rem;">
+                <strong>💡 Points System:</strong> Earn 1 point for every 10,000 VND spent. Redeem 1 point = 1,000 VND discount.
+            </div>
+        </div>
+
+        <!-- Top Loyalty Members -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">🏆 Top Loyalty Members</h2>
+            </div>
+            <div id="topMembersContainer">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading top members...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- All Loyalty Accounts -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">📊 All Loyalty Accounts</h2>
+            </div>
+
+            <!-- Filter Section -->
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="filterTier">Filter by Tier</label>
+                    <select class="form-select" id="filterTier" onchange="loadAllAccounts()">
+                        <option value="">All Tiers</option>
+                        <option value="Gold">Gold</option>
+                        <option value="Silver">Silver</option>
+                        <option value="Bronze">Bronze</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="allAccountsContainer">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading accounts...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Redeem Points Modal -->
+        <div id="redeemModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Redeem Loyalty Points</h3>
+                    <button class="modal-close" onclick="closeRedeemModal()">&times;</button>
+                </div>
+                <form id="redeemForm">
+                    <input type="hidden" id="redeemCustomerId" name="customerId">
+                    
+                    <div class="form-group">
+                        <label class="form-label">Customer</label>
+                        <p id="redeemCustomerName" style="font-weight: bold;"></p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Available Points</label>
+                        <p id="redeemAvailablePoints" style="font-weight: bold; color: #28a745;"></p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Discount Value</label>
+                        <p id="redeemDiscountValue" style="font-weight: bold;"></p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label required" for="redeemPoints">Points to Redeem</label>
+                        <input type="number" class="form-input" id="redeemPoints" name="points" min="1" required>
+                        <small class="text-muted">Each point = 1,000 VND discount</small>
+                    </div>
+
+                    <div class="btn-group">
+                        <button type="submit" class="btn btn-success">✅ Redeem Points</button>
+                        <button type="button" class="btn btn-secondary" onclick="closeRedeemModal()">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2024 Highlands Coffee Management System. All rights reserved.</p>
+    </footer>
+
+    <script>
+        let allAccounts = [];
+
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            }).format(amount);
+        }
+
+        function getTierIcon(tier) {
+            const icons = {
+                'Bronze': '🥉',
+                'Silver': '🥈',
+                'Gold': '🥇'
+            };
+            return icons[tier] || '🎖️';
+        }
+
+        function getTierColor(tier) {
+            const colors = {
+                'Bronze': 'secondary',
+                'Silver': 'info',
+                'Gold': 'warning'
+            };
+            return colors[tier] || 'secondary';
+        }
+
+        function showAlert(message, type = 'success') {
+            const alertContainer = document.getElementById('alertContainer');
+            alertContainer.innerHTML = `
+                <div class="alert alert-${type}">
+                    <strong>${type === 'error' ? 'Error:' : 'Success:'}</strong> ${message}
+                </div>
+            `;
+            setTimeout(() => {
+                alertContainer.innerHTML = '';
+            }, 5000);
+        }
+
+        async function loadTopMembers() {
+            try {
+                const response = await fetch('/api/loyalty/top?limit=10');
+                const data = await response.json();
+
+                const container = document.getElementById('topMembersContainer');
+
+                if (!data.success || data.topMembers.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">🏆</div>
+                            <div class="empty-state-text">No loyalty members yet</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = `
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Rank</th>
+                                    <th>Customer</th>
+                                    <th>Email</th>
+                                    <th>Points</th>
+                                    <th>Discount Value</th>
+                                    <th>Tier</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${data.topMembers.map((account, index) => `
+                                    <tr>
+                                        <td><strong>${index + 1}</strong></td>
+                                        <td>${account.customer_name}</td>
+                                        <td>${account.customer_email || '-'}</td>
+                                        <td><strong>${account.points}</strong></td>
+                                        <td>${formatCurrency(account.points * 1000)}</td>
+                                        <td>
+                                            <span class="badge badge-${getTierColor(account.tier)}">
+                                                ${getTierIcon(account.tier)} ${account.tier}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+
+            } catch (error) {
+                document.getElementById('topMembersContainer').innerHTML = `
+                    <div class="alert alert-error">
+                        <strong>Error:</strong> Failed to load top members
+                    </div>
+                `;
+                console.error('Error loading top members:', error);
+            }
+        }
+
+        async function loadAllAccounts() {
+            try {
+                const response = await fetch('/api/loyalty');
+                const data = await response.json();
+
+                const container = document.getElementById('allAccountsContainer');
+
+                if (!data.success || data.accounts.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📊</div>
+                            <div class="empty-state-text">No loyalty accounts found</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                allAccounts = data.accounts;
+
+                // Apply tier filter
+                const tierFilter = document.getElementById('filterTier').value;
+                let filteredAccounts = allAccounts;
+
+                if (tierFilter) {
+                    filteredAccounts = filteredAccounts.filter(a => a.tier === tierFilter);
+                }
+
+                if (filteredAccounts.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">🔍</div>
+                            <div class="empty-state-text">No accounts match the selected tier</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = `
+                    <div class="table-container">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Customer</th>
+                                    <th>Email</th>
+                                    <th>Points</th>
+                                    <th>Discount Value</th>
+                                    <th>Tier</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${filteredAccounts.map(account => `
+                                    <tr>
+                                        <td><strong>${account.customer_name}</strong></td>
+                                        <td>${account.customer_email || '-'}</td>
+                                        <td><strong>${account.points}</strong></td>
+                                        <td>${formatCurrency(account.points * 1000)}</td>
+                                        <td>
+                                            <span class="badge badge-${getTierColor(account.tier)}">
+                                                ${getTierIcon(account.tier)} ${account.tier}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <button 
+                                                class="btn btn-sm btn-success" 
+                                                onclick="openRedeemModal(${account.customer_id}, '${account.customer_name}', ${account.points})"
+                                                ${account.points === 0 ? 'disabled' : ''}>
+                                                🎁 Redeem
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3">
+                        <p class="text-muted">Showing ${filteredAccounts.length} of ${allAccounts.length} accounts</p>
+                    </div>
+                `;
+
+            } catch (error) {
+                document.getElementById('allAccountsContainer').innerHTML = `
+                    <div class="alert alert-error">
+                        <strong>Error:</strong> Failed to load loyalty accounts
+                    </div>
+                `;
+                console.error('Error loading accounts:', error);
+            }
+        }
+
+        function openRedeemModal(customerId, customerName, availablePoints) {
+            document.getElementById('redeemCustomerId').value = customerId;
+            document.getElementById('redeemCustomerName').textContent = customerName;
+            document.getElementById('redeemAvailablePoints').textContent = `${availablePoints} points`;
+            document.getElementById('redeemDiscountValue').textContent = formatCurrency(availablePoints * 1000);
+            document.getElementById('redeemPoints').max = availablePoints;
+            document.getElementById('redeemPoints').value = '';
+            
+            document.getElementById('redeemModal').classList.remove('hidden');
+        }
+
+        function closeRedeemModal() {
+            document.getElementById('redeemModal').classList.add('hidden');
+        }
+
+        document.getElementById('redeemForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const customerId = document.getElementById('redeemCustomerId').value;
+            const points = parseInt(document.getElementById('redeemPoints').value);
+
+            try {
+                const response = await fetch('/api/loyalty/redeem', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        customerId: parseInt(customerId),
+                        points: points
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    closeRedeemModal();
+                    loadTopMembers();
+                    loadAllAccounts();
+                } else {
+                    showAlert(data.error || 'Failed to redeem points', 'error');
+                }
+            } catch (error) {
+                console.error('Error redeeming points:', error);
+                showAlert('Failed to redeem points', 'error');
+            }
+        });
+
+        // Close modal when clicking outside
+        document.getElementById('redeemModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeRedeemModal();
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTopMembers();
+            loadAllAccounts();
+        });
+    </script>
+</body>
+</html>

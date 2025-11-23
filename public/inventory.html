@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory - HC-CMS</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <span class="logo-icon">☕</span>
+                <h1>Highlands Coffee CMS</h1>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/" class="nav-link">Dashboard</a>
+            <a href="/create-order.html" class="nav-link">Create Order</a>
+            <a href="/orders.html" class="nav-link">Orders</a>
+            <a href="/inventory.html" class="nav-link active">Inventory</a>
+            <a href="/loyalty.html" class="nav-link">Loyalty</a>
+            <a href="/customers.html" class="nav-link">Customers</a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Alert Container -->
+        <div id="alertContainer"></div>
+
+        <!-- Inventory Overview Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">📦 Inventory Management</h2>
+                <p class="card-subtitle">Manage stock levels across all branches</p>
+            </div>
+
+            <!-- Filter Section -->
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="filterBranch">Filter by Branch</label>
+                    <select class="form-select" id="filterBranch" onchange="loadInventory()">
+                        <option value="">All Branches</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="filterCategory">Filter by Category</label>
+                    <select class="form-select" id="filterCategory" onchange="loadInventory()">
+                        <option value="">All Categories</option>
+                        <option value="Coffee">Coffee</option>
+                        <option value="Tea">Tea</option>
+                        <option value="Food">Food</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="filterStock">Stock Level</label>
+                    <select class="form-select" id="filterStock" onchange="loadInventory()">
+                        <option value="">All Stock Levels</option>
+                        <option value="low">Low Stock Only</option>
+                        <option value="out">Out of Stock</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Inventory Table -->
+            <div id="inventoryContainer">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading inventory...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Restock Modal -->
+        <div id="restockModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Restock Item</h3>
+                    <button class="modal-close" onclick="closeRestockModal()">&times;</button>
+                </div>
+                <form id="restockForm">
+                    <input type="hidden" id="restockMenuItemId" name="menuItemId">
+                    <input type="hidden" id="restockBranchId" name="branchId">
+                    
+                    <div class="form-group">
+                        <label class="form-label">Item</label>
+                        <p id="restockItemName" style="font-weight: bold;"></p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Branch</label>
+                        <p id="restockBranchName" style="font-weight: bold;"></p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Current Stock</label>
+                        <p id="restockCurrentStock" style="font-weight: bold;"></p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label required" for="restockQuantity">Quantity to Add</label>
+                        <input type="number" class="form-input" id="restockQuantity" name="quantity" min="1" required>
+                    </div>
+
+                    <div class="btn-group">
+                        <button type="submit" class="btn btn-success">✅ Confirm Restock</button>
+                        <button type="button" class="btn btn-secondary" onclick="closeRestockModal()">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2024 Highlands Coffee Management System. All rights reserved.</p>
+    </footer>
+
+    <style>
+        .stock-low {
+            background-color: #fff3cd !important;
+        }
+        .stock-out {
+            background-color: #f8d7da !important;
+        }
+    </style>
+
+    <script>
+        let allInventory = [];
+        let branches = [];
+
+        function showAlert(message, type = 'success') {
+            const alertContainer = document.getElementById('alertContainer');
+            alertContainer.innerHTML = `
+                <div class="alert alert-${type}">
+                    <strong>${type === 'error' ? 'Error:' : 'Success:'}</strong> ${message}
+                </div>
+            `;
+            setTimeout(() => {
+                alertContainer.innerHTML = '';
+            }, 5000);
+        }
+
+        async function loadBranches() {
+            try {
+                const response = await fetch('/api/branches');
+                const data = await response.json();
+                branches = data.branches || [];
+
+                const select = document.getElementById('filterBranch');
+                branches.forEach(branch => {
+                    const option = document.createElement('option');
+                    option.value = branch.id;
+                    option.textContent = branch.name;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading branches:', error);
+            }
+        }
+
+        async function loadInventory() {
+            try {
+                const response = await fetch('/api/inventory');
+                const data = await response.json();
+
+                const container = document.getElementById('inventoryContainer');
+
+                if (!data.success || data.inventory.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📦</div>
+                            <div class="empty-state-text">No inventory data available</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                allInventory = data.inventory;
+
+                // Apply filters
+                const branchFilter = document.getElementById('filterBranch').value;
+                const categoryFilter = document.getElementById('filterCategory').value;
+                const stockFilter = document.getElementById('filterStock').value;
+
+                let filteredInventory = allInventory;
+
+                if (branchFilter) {
+                    filteredInventory = filteredInventory.filter(i => i.branch_id == branchFilter);
+                }
+                if (categoryFilter) {
+                    filteredInventory = filteredInventory.filter(i => i.category === categoryFilter);
+                }
+                if (stockFilter === 'low') {
+                    filteredInventory = filteredInventory.filter(i => i.quantity <= i.low_stock_threshold && i.quantity > 0);
+                } else if (stockFilter === 'out') {
+                    filteredInventory = filteredInventory.filter(i => i.quantity === 0);
+                }
+
+                if (filteredInventory.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">🔍</div>
+                            <div class="empty-state-text">No items match the selected filters</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = `
+                    <div class="table-container">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Item Name</th>
+                                    <th>Category</th>
+                                    <th>Branch</th>
+                                    <th>Price</th>
+                                    <th>Current Stock</th>
+                                    <th>Threshold</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${filteredInventory.map(item => {
+                                    const isLowStock = item.quantity <= item.low_stock_threshold;
+                                    const isOutOfStock = item.quantity === 0;
+                                    const rowClass = isOutOfStock ? 'stock-out' : (isLowStock ? 'stock-low' : '');
+                                    
+                                    return `
+                                        <tr class="${rowClass}">
+                                            <td><strong>${item.menu_item_name}</strong></td>
+                                            <td><span class="badge badge-secondary">${item.category}</span></td>
+                                            <td>${item.branch_name}</td>
+                                            <td>${formatCurrency(item.price)}</td>
+                                            <td><strong>${item.quantity}</strong></td>
+                                            <td>${item.low_stock_threshold}</td>
+                                            <td>
+                                                ${isOutOfStock ? 
+                                                    '<span class="badge badge-danger">Out of Stock</span>' : 
+                                                    (isLowStock ? 
+                                                        '<span class="badge badge-warning">Low Stock</span>' : 
+                                                        '<span class="badge badge-success">In Stock</span>')
+                                                }
+                                            </td>
+                                            <td>
+                                                <button 
+                                                    class="btn btn-sm btn-primary" 
+                                                    onclick="openRestockModal(${item.menu_item_id}, ${item.branch_id}, '${item.menu_item_name}', '${item.branch_name}', ${item.quantity})">
+                                                    🔄 Restock
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3">
+                        <p class="text-muted">
+                            Showing ${filteredInventory.length} of ${allInventory.length} items
+                        </p>
+                    </div>
+                `;
+
+            } catch (error) {
+                document.getElementById('inventoryContainer').innerHTML = `
+                    <div class="alert alert-error">
+                        <strong>Error:</strong> Failed to load inventory
+                    </div>
+                `;
+                console.error('Error loading inventory:', error);
+            }
+        }
+
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            }).format(amount);
+        }
+
+        function openRestockModal(menuItemId, branchId, itemName, branchName, currentStock) {
+            document.getElementById('restockMenuItemId').value = menuItemId;
+            document.getElementById('restockBranchId').value = branchId;
+            document.getElementById('restockItemName').textContent = itemName;
+            document.getElementById('restockBranchName').textContent = branchName;
+            document.getElementById('restockCurrentStock').textContent = currentStock;
+            document.getElementById('restockQuantity').value = '';
+            
+            document.getElementById('restockModal').classList.remove('hidden');
+        }
+
+        function closeRestockModal() {
+            document.getElementById('restockModal').classList.add('hidden');
+        }
+
+        document.getElementById('restockForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const menuItemId = document.getElementById('restockMenuItemId').value;
+            const branchId = document.getElementById('restockBranchId').value;
+            const quantity = parseInt(document.getElementById('restockQuantity').value);
+
+            try {
+                const response = await fetch('/api/inventory/restock', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        menuItemId: parseInt(menuItemId),
+                        branchId: parseInt(branchId),
+                        quantity: quantity
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    closeRestockModal();
+                    loadInventory();
+                } else {
+                    showAlert(data.error || 'Failed to restock item', 'error');
+                }
+            } catch (error) {
+                console.error('Error restocking item:', error);
+                showAlert('Failed to restock item', 'error');
+            }
+        });
+
+        // Close modal when clicking outside
+        document.getElementById('restockModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeRestockModal();
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadBranches();
+            loadInventory();
+        });
+    </script>
+</body>
+</html>

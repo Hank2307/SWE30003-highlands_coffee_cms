@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HC-CMS - Highlands Coffee Management System</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <span class="logo-icon">☕</span>
+                <h1>Highlands Coffee CMS</h1>
+            </div>
+            <div class="header-info">
+                <p id="currentDateTime"></p>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/" class="nav-link active">Dashboard</a>
+            <a href="/create-order.html" class="nav-link">Create Order</a>
+            <a href="/orders.html" class="nav-link">Orders</a>
+            <a href="/inventory.html" class="nav-link">Inventory</a>
+            <a href="/loyalty.html" class="nav-link">Loyalty</a>
+            <a href="/customers.html" class="nav-link">Customers</a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Welcome Section -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Welcome to HC-CMS Dashboard</h2>
+                <p class="card-subtitle">Centralized Café Management System for Highlands Coffee</p>
+            </div>
+            <p>Manage orders, inventory, payments, and loyalty programs all in one place.</p>
+        </div>
+
+        <!-- Statistics Cards -->
+        <div id="statsContainer" class="grid grid-4">
+            <div class="stat-card">
+                <div class="stat-value" id="totalOrders">-</div>
+                <div class="stat-label">Total Orders</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalRevenue">-</div>
+                <div class="stat-label">Total Revenue</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalCustomers">-</div>
+                <div class="stat-label">Customers</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="lowStockItems">-</div>
+                <div class="stat-label">Low Stock Items</div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Quick Actions</h2>
+            </div>
+            <div class="btn-group">
+                <a href="/create-order.html" class="btn btn-primary">➕ New Order</a>
+                <a href="/inventory.html" class="btn btn-success">📦 View Inventory</a>
+                <a href="/customers.html" class="btn btn-info">👥 Manage Customers</a>
+                <a href="/orders.html" class="btn btn-secondary">📋 View All Orders</a>
+            </div>
+        </div>
+
+        <!-- Recent Orders -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Recent Orders</h2>
+            </div>
+            <div id="recentOrdersContainer">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading orders...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Low Stock Alerts -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">⚠️ Low Stock Alerts</h2>
+            </div>
+            <div id="lowStockContainer">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading inventory data...</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>&copy; 2024 Highlands Coffee Management System. All rights reserved.</p>
+    </footer>
+
+    <script>
+        // Update current date/time
+        function updateDateTime() {
+            const now = new Date();
+            const options = { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            };
+            document.getElementById('currentDateTime').textContent = 
+                now.toLocaleDateString('en-US', options);
+        }
+        updateDateTime();
+        setInterval(updateDateTime, 60000);
+
+        // Format currency
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            }).format(amount);
+        }
+
+        // Load Dashboard Statistics
+        async function loadStatistics() {
+            try {
+                // Get order statistics
+                const orderStatsRes = await fetch('/api/orders/statistics/summary');
+                const orderStats = await orderStatsRes.json();
+                
+                if (orderStats.success) {
+                    document.getElementById('totalOrders').textContent = 
+                        orderStats.statistics.total_orders || 0;
+                    document.getElementById('totalRevenue').textContent = 
+                        formatCurrency(orderStats.statistics.total_revenue || 0);
+                }
+
+                // Get customer count
+                const customersRes = await fetch('/api/customers');
+                const customers = await customersRes.json();
+                document.getElementById('totalCustomers').textContent = 
+                    customers.customers?.length || 0;
+
+                // Get low stock items
+                const lowStockRes = await fetch('/api/inventory/low-stock');
+                const lowStock = await lowStockRes.json();
+                document.getElementById('lowStockItems').textContent = 
+                    lowStock.count || 0;
+
+            } catch (error) {
+                console.error('Error loading statistics:', error);
+            }
+        }
+
+        // Load Recent Orders
+        async function loadRecentOrders() {
+            try {
+                const response = await fetch('/api/orders');
+                const data = await response.json();
+
+                const container = document.getElementById('recentOrdersContainer');
+
+                if (!data.success || data.orders.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📋</div>
+                            <div class="empty-state-text">No orders yet</div>
+                            <a href="/create-order.html" class="btn btn-primary">Create First Order</a>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Show only last 5 orders
+                const recentOrders = data.orders.slice(0, 5);
+
+                container.innerHTML = `
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Order ID</th>
+                                    <th>Customer</th>
+                                    <th>Branch</th>
+                                    <th>Total</th>
+                                    <th>Payment</th>
+                                    <th>Status</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${recentOrders.map(order => `
+                                    <tr>
+                                        <td>#${order.id}</td>
+                                        <td>${order.customer_name}</td>
+                                        <td>${order.branch_name}</td>
+                                        <td>${formatCurrency(order.total_amount)}</td>
+                                        <td><span class="badge badge-info">${order.payment_type}</span></td>
+                                        <td><span class="badge badge-${getStatusColor(order.order_status)}">${order.order_status}</span></td>
+                                        <td>${new Date(order.created_at).toLocaleDateString()}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3 text-center">
+                        <a href="/orders.html" class="btn btn-outline">View All Orders →</a>
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('recentOrdersContainer').innerHTML = `
+                    <div class="alert alert-error">
+                        <strong>Error:</strong> Failed to load recent orders
+                    </div>
+                `;
+                console.error('Error loading recent orders:', error);
+            }
+        }
+
+        // Load Low Stock Items
+        async function loadLowStockItems() {
+            try {
+                const response = await fetch('/api/inventory/low-stock');
+                const data = await response.json();
+
+                const container = document.getElementById('lowStockContainer');
+
+                if (!data.success || data.lowStockItems.length === 0) {
+                    container.innerHTML = `
+                        <div class="alert alert-success">
+                            ✅ All items are well stocked!
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = `
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Item</th>
+                                    <th>Branch</th>
+                                    <th>Current Stock</th>
+                                    <th>Threshold</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${data.lowStockItems.map(item => `
+                                    <tr>
+                                        <td>${item.menu_item_name}</td>
+                                        <td>${item.branch_name}</td>
+                                        <td><span class="badge badge-danger">${item.quantity}</span></td>
+                                        <td>${item.low_stock_threshold}</td>
+                                        <td>
+                                            <a href="/inventory.html" class="btn btn-sm btn-primary">Restock</a>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('lowStockContainer').innerHTML = `
+                    <div class="alert alert-error">
+                        <strong>Error:</strong> Failed to load inventory data
+                    </div>
+                `;
+                console.error('Error loading low stock items:', error);
+            }
+        }
+
+        function getStatusColor(status) {
+            const colors = {
+                'pending': 'warning',
+                'confirmed': 'info',
+                'preparing': 'info',
+                'ready': 'success',
+                'completed': 'success',
+                'cancelled': 'danger'
+            };
+            return colors[status] || 'secondary';
+        }
+
+        // Load all data on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadStatistics();
+            loadRecentOrders();
+            loadLowStockItems();
+        });
+    </script>
+</body>
+</html>
