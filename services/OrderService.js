@@ -21,8 +21,9 @@ class OrderService {
         throw new Error('Missing required order information');
       }
 
-      // Check if guest order (no customer ID)
-      const isGuestOrder = !customerId || customerId === '';
+      // FIXED: Properly check for guest order (null, undefined, NaN, or 0)
+      const isGuestOrder = customerId === null || customerId === undefined || 
+                           customerId === '' || isNaN(customerId) || customerId === 0;
       
       // For guest orders, create a temporary guest customer
       let actualCustomerId = customerId;
@@ -85,7 +86,7 @@ class OrderService {
       let totalAmount = subtotal;
       let loyaltyDiscount = 0;
 
-      // Apply loyalty points if requested (only for registered customers)
+      // FIXED: Apply loyalty points only if NOT a guest order AND points are requested
       if (!isGuestOrder && loyaltyPointsToRedeem && loyaltyPointsToRedeem > 0) {
         const redemptionResult = await this.loyaltyService.redeemPoints(
           actualCustomerId,

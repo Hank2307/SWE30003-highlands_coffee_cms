@@ -54,11 +54,11 @@ function createOrderRoutes(orderService, inventoryService, branchService, loyalt
     try {
       const { customerId, branchId, items, paymentType, paymentDetails, loyaltyPointsToRedeem } = req.body;
 
-      // Validate required fields
-      if (!customerId || !branchId || !paymentType) {
+      // FIXED: Validate required fields - customerId is optional for guest orders
+      if (!branchId || !paymentType) {
         return res.status(400).json({
           success: false,
-          error: 'Missing required fields: customerId, branchId, or paymentType'
+          error: 'Missing required fields: branchId or paymentType'
         });
       }
 
@@ -75,9 +75,15 @@ function createOrderRoutes(orderService, inventoryService, branchService, loyalt
         quantity: parseInt(item.quantity)
       }));
 
+      // FIXED: Handle customerId properly - can be null for guest orders
+      // Only parse if it's not null/undefined
+      const parsedCustomerId = (customerId === null || customerId === undefined) 
+        ? null 
+        : parseInt(customerId);
+
       // Create order
       const result = await orderService.createOrder({
-        customerId: parseInt(customerId),
+        customerId: parsedCustomerId,
         branchId: parseInt(branchId),
         items: parsedItems,
         paymentType: paymentType,

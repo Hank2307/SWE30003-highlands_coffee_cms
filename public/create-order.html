@@ -244,6 +244,7 @@
                 loyaltyValue.textContent = '';
                 document.getElementById('loyaltyPointsToRedeem').value = 0;
                 document.getElementById('loyaltyPointsToRedeem').disabled = true;
+                loyaltyPoints = 0;
             } else {
                 guestModeDiv.classList.add('hidden');
                 redeemSection.classList.remove('hidden');
@@ -467,7 +468,7 @@
             e.preventDefault();
 
             const formData = new FormData(this);
-            const customerId = document.getElementById('customerId').value;
+            const customerIdValue = document.getElementById('customerId').value;
             const branchId = document.getElementById('branchId').value;
             
             if (!branchId) {
@@ -477,8 +478,14 @@
 
             const paymentType = formData.get('paymentType');
             
-            // Guest mode: no customer ID or loyalty points
-            const isGuest = !customerId || customerId === '';
+            // FIXED: Properly handle guest mode
+            // Check if customer ID is empty, null, or just whitespace
+            const isGuest = !customerIdValue || customerIdValue.trim() === '';
+            
+            // FIXED: For guest orders, send null instead of trying to parse empty string
+            const customerId = isGuest ? null : parseInt(customerIdValue);
+            
+            // FIXED: Only redeem points if NOT in guest mode
             const loyaltyPointsToRedeem = isGuest ? 0 : (parseInt(formData.get('loyaltyPointsToRedeem')) || 0);
 
             // Collect order items
@@ -521,7 +528,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        customerId: parseInt(customerId),
+                        customerId: customerId, // Will be null for guests
                         branchId: parseInt(branchId),
                         items: items,
                         paymentType: paymentType,

@@ -88,7 +88,7 @@
                 <form id="restockForm">
                     <input type="hidden" id="restockMenuItemId" name="menuItemId">
                     <input type="hidden" id="restockBranchId" name="branchId">
-                    
+
                     <div class="form-group">
                         <label class="form-label">Item</label>
                         <p id="restockItemName" style="font-weight: bold;"></p>
@@ -126,6 +126,7 @@
         .stock-low {
             background-color: #fff3cd !important;
         }
+
         .stock-out {
             background-color: #f8d7da !important;
         }
@@ -139,11 +140,10 @@
 
         function showAlert(message, type = 'success') {
             const alertContainer = document.getElementById('alertContainer');
-            alertContainer.innerHTML = `
-                <div class="alert alert-${type}">
-                    <strong>${type === 'error' ? 'Error:' : 'Success:'}</strong> ${message}
-                </div>
-            `;
+            alertContainer.innerHTML = `<div class="alert alert-${type}">
+                <strong>${type === 'error' ? 'Error:' : 'Success:'}</strong> ${message}
+            </div>`;
+
             setTimeout(() => {
                 alertContainer.innerHTML = '';
             }, 5000);
@@ -162,14 +162,20 @@
                     valueField: 'id',
                     searchFields: ['name', 'address'],
                     placeholder: 'Type to search branch...',
-                    renderItem: (item) => `
-                        <div class="autocomplete-item">
-                            <div class="autocomplete-item-main">${item.name}</div>
-                            <div class="autocomplete-item-sub">${item.address}</div>
-                        </div>
-                    `,
+                    renderItem: (item) => `<div class="autocomplete-item">
+                        <div class="autocomplete-item-main">${item.name}</div>
+                        <div class="autocomplete-item-sub">${item.address}</div>
+                    </div>`,
                     onSelect: (item) => {
                         selectedBranchId = item.id;
+                        loadInventory();
+                    }
+                });
+
+                // Add input listener to reset filter when cleared
+                document.getElementById('filterBranch').addEventListener('input', function(e) {
+                    if (e.target.value === '') {
+                        selectedBranchId = '';
                         loadInventory();
                     }
                 });
@@ -188,14 +194,14 @@
             return inventory.sort((a, b) => {
                 const statusA = getStockStatus(a);
                 const statusB = getStockStatus(b);
-                
+
                 // Priority: out > low > normal
                 const priority = { 'out': 0, 'low': 1, 'normal': 2 };
-                
+
                 if (priority[statusA] !== priority[statusB]) {
                     return priority[statusA] - priority[statusB];
                 }
-                
+
                 // If same status, sort by quantity ascending
                 return a.quantity - b.quantity;
             });
@@ -205,113 +211,111 @@
             try {
                 const response = await fetch('/api/inventory');
                 const data = await response.json();
-
                 const container = document.getElementById('inventoryContainer');
 
                 if (!data.success || data.inventory.length === 0) {
-                    container.innerHTML = `
-                        <div class="empty-state">
-                            <div class="empty-state-icon">📦</div>
-                            <div class="empty-state-text">No inventory data available</div>
-                        </div>
-                    `;
+                    container.innerHTML = `<div class="empty-state">
+                        <div class="empty-state-icon">📦</div>
+                        <div class="empty-state-text">No inventory data available</div>
+                    </div>`;
                     return;
                 }
 
                 allInventory = data.inventory;
 
                 // Apply filters
-                const branchFilter = document.getElementById('filterBranch').value;
                 const categoryFilter = document.getElementById('filterCategory').value;
                 const stockFilter = document.getElementById('filterStock').value;
 
                 let filteredInventory = allInventory;
 
-                if (branchFilter) {
-                    filteredInventory = filteredInventory.filter(i => i.branch_id == branchFilter);
+                // FIXED: Use selectedBranchId instead of branchFilter
+                if (selectedBranchId) {
+                    filteredInventory = filteredInventory.filter(i => i.branch_id == selectedBranchId);
                 }
+
                 if (categoryFilter) {
                     filteredInventory = filteredInventory.filter(i => i.category === categoryFilter);
                 }
+
                 if (stockFilter === 'low') {
-                    filteredInventory = filteredInventory.filter(i => i.quantity <= i.low_stock_threshold && i.quantity > 0);
+                    filteredInventory = filteredInventory.filter(i => 
+                        i.quantity <= i.low_stock_threshold && i.quantity > 0
+                    );
                 } else if (stockFilter === 'out') {
                     filteredInventory = filteredInventory.filter(i => i.quantity === 0);
+                } else if (stockFilter === 'normal') {
+                    filteredInventory = filteredInventory.filter(i => 
+                        i.quantity > i.low_stock_threshold
+                    );
+                } else if (stockFilter === 'sorted') {
+                    // FIXED: Implement the "Sort: Critical First" option
+                    filteredInventory = sortInventoryByStock([...filteredInventory]);
                 }
 
                 if (filteredInventory.length === 0) {
-                    container.innerHTML = `
-                        <div class="empty-state">
-                            <div class="empty-state-icon">🔍</div>
-                            <div class="empty-state-text">No items match the selected filters</div>
-                        </div>
-                    `;
+                    container.innerHTML = `<div class="empty-state">
+                        <div class="empty-state-icon">🔍</div>
+                        <div class="empty-state-text">No items match the selected filters</div>
+                    </div>`;
                     return;
                 }
 
-                container.innerHTML = `
-                    <div class="table-container">
-                        <table class="table table-striped">
-                            <thead>
-                                <tr>
-                                    <th>Item Name</th>
-                                    <th>Category</th>
-                                    <th>Branch</th>
-                                    <th>Price</th>
-                                    <th>Current Stock</th>
-                                    <th>Threshold</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${filteredInventory.map(item => {
-                                    const isLowStock = item.quantity <= item.low_stock_threshold;
-                                    const isOutOfStock = item.quantity === 0;
-                                    const rowClass = isOutOfStock ? 'stock-out' : (isLowStock ? 'stock-low' : '');
-                                    
-                                    return `
-                                        <tr class="${rowClass}">
-                                            <td><strong>${item.menu_item_name}</strong></td>
-                                            <td><span class="badge badge-secondary">${item.category}</span></td>
-                                            <td>${item.branch_name}</td>
-                                            <td>${formatCurrency(item.price)}</td>
-                                            <td><strong>${item.quantity}</strong></td>
-                                            <td>${item.low_stock_threshold}</td>
-                                            <td>
-                                                ${isOutOfStock ? 
-                                                    '<span class="badge badge-danger">Out of Stock</span>' : 
-                                                    (isLowStock ? 
-                                                        '<span class="badge badge-warning">Low Stock</span>' : 
-                                                        '<span class="badge badge-success">In Stock</span>')
-                                                }
-                                            </td>
-                                            <td>
-                                                <button 
-                                                    class="btn btn-sm btn-primary" 
-                                                    onclick="openRestockModal(${item.menu_item_id}, ${item.branch_id}, '${item.menu_item_name}', '${item.branch_name}', ${item.quantity})">
-                                                    🔄 Restock
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    `;
-                                }).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="mt-3">
-                        <p class="text-muted">
-                            Showing ${filteredInventory.length} of ${allInventory.length} items
-                        </p>
-                    </div>
-                `;
+                container.innerHTML = `<div class="table-container">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Item Name</th>
+                                <th>Category</th>
+                                <th>Branch</th>
+                                <th>Price</th>
+                                <th>Current Stock</th>
+                                <th>Threshold</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filteredInventory.map(item => {
+                                const isLowStock = item.quantity <= item.low_stock_threshold;
+                                const isOutOfStock = item.quantity === 0;
+                                const rowClass = isOutOfStock ? 'stock-out' : (isLowStock ? 'stock-low' : '');
 
+                                return `<tr class="${rowClass}">
+                                    <td><strong>${item.menu_item_name}</strong></td>
+                                    <td><span class="badge badge-secondary">${item.category}</span></td>
+                                    <td>${item.branch_name}</td>
+                                    <td>${formatCurrency(item.price)}</td>
+                                    <td><strong>${item.quantity}</strong></td>
+                                    <td>${item.low_stock_threshold}</td>
+                                    <td>
+                                        ${isOutOfStock 
+                                            ? '<span class="badge badge-danger">Out of Stock</span>' 
+                                            : (isLowStock 
+                                                ? '<span class="badge badge-warning">Low Stock</span>' 
+                                                : '<span class="badge badge-success">In Stock</span>')
+                                        }
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-primary" 
+                                            onclick="openRestockModal(${item.menu_item_id}, ${item.branch_id}, '${item.menu_item_name}', '${item.branch_name}', ${item.quantity})">
+                                            🔄 Restock
+                                        </button>
+                                    </td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-3">
+                    <p class="text-muted">
+                        Showing ${filteredInventory.length} of ${allInventory.length} items
+                    </p>
+                </div>`;
             } catch (error) {
-                document.getElementById('inventoryContainer').innerHTML = `
-                    <div class="alert alert-error">
-                        <strong>Error:</strong> Failed to load inventory
-                    </div>
-                `;
+                document.getElementById('inventoryContainer').innerHTML = `<div class="alert alert-error">
+                    <strong>Error:</strong> Failed to load inventory
+                </div>`;
                 console.error('Error loading inventory:', error);
             }
         }
@@ -330,7 +334,6 @@
             document.getElementById('restockBranchName').textContent = branchName;
             document.getElementById('restockCurrentStock').textContent = currentStock;
             document.getElementById('restockQuantity').value = '';
-            
             document.getElementById('restockModal').classList.remove('hidden');
         }
 
@@ -348,7 +351,9 @@
             try {
                 const response = await fetch('/api/inventory/restock', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
                     body: JSON.stringify({
                         menuItemId: parseInt(menuItemId),
                         branchId: parseInt(branchId),
