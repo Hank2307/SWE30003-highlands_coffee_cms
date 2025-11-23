@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Loyalty Program - HC-CMS</title>
     <link rel="stylesheet" href="/css/style.css">
+    <script src="/js/autocomplete.js"></script>
 </head>
 <body>
     <!-- Header -->
@@ -84,8 +85,12 @@
                 <h2 class="card-title">📊 All Loyalty Accounts</h2>
             </div>
 
-            <!-- Filter Section -->
+            <!-- Search and Filter Section -->
             <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="searchCustomer">Search Customer</label>
+                    <input type="text" class="form-input" id="searchCustomer" placeholder="Type to search customer..." autocomplete="off">
+                </div>
                 <div class="form-group">
                     <label class="form-label" for="filterTier">Filter by Tier</label>
                     <select class="form-select" id="filterTier" onchange="loadAllAccounts()">
@@ -151,6 +156,8 @@
 
     <script>
         let allAccounts = [];
+        let customerAutocomplete;
+        let searchQuery = '';
 
         function formatCurrency(amount) {
             return new Intl.NumberFormat('vi-VN', {
@@ -187,6 +194,35 @@
             setTimeout(() => {
                 alertContainer.innerHTML = '';
             }, 5000);
+        }
+
+        function initializeCustomerSearch() {
+            // Initialize customer search autocomplete
+            customerAutocomplete = new Autocomplete(document.getElementById('searchCustomer'), {
+                data: allAccounts,
+                displayField: 'customer_name',
+                valueField: 'customer_id',
+                searchFields: ['customer_name', 'customer_email'],
+                placeholder: 'Type to search customer...',
+                renderItem: (item) => `
+                    <div class="autocomplete-item">
+                        <div class="autocomplete-item-main">${item.customer_name}</div>
+                        <div class="autocomplete-item-sub">
+                            ${item.customer_email || 'No email'} • ${item.points} points • ${getTierIcon(item.tier)} ${item.tier}
+                        </div>
+                    </div>
+                `,
+                onSelect: (item) => {
+                    searchQuery = item.customer_name.toLowerCase();
+                    loadAllAccounts();
+                }
+            });
+
+            // Also filter on input change
+            document.getElementById('searchCustomer').addEventListener('input', function(e) {
+                searchQuery = e.target.value.toLowerCase().trim();
+                loadAllAccounts();
+            });
         }
 
         async function loadTopMembers() {
@@ -268,6 +304,11 @@
 
                 allAccounts = data.accounts;
 
+                // Initialize search if not already done
+                if (!customerAutocomplete) {
+                    initializeCustomerSearch();
+                }
+
                 // Apply tier filter
                 const tierFilter = document.getElementById('filterTier').value;
                 let filteredAccounts = allAccounts;
@@ -276,11 +317,21 @@
                     filteredAccounts = filteredAccounts.filter(a => a.tier === tierFilter);
                 }
 
+                // Apply search filter
+                if (searchQuery) {
+                    filteredAccounts = filteredAccounts.filter(account => {
+                        const nameMatch = account.customer_name.toLowerCase().includes(searchQuery);
+                        const emailMatch = account.customer_email && account.customer_email.toLowerCase().includes(searchQuery);
+                        return nameMatch || emailMatch;
+                    });
+                }
+
                 if (filteredAccounts.length === 0) {
                     container.innerHTML = `
                         <div class="empty-state">
                             <div class="empty-state-icon">🔍</div>
-                            <div class="empty-state-text">No accounts match the selected tier</div>
+                            <div class="empty-state-text">No accounts match your search</div>
+                            <button class="btn btn-secondary" onclick="clearSearch()">Clear Search</button>
                         </div>
                     `;
                     return;
@@ -337,6 +388,16 @@
                 `;
                 console.error('Error loading accounts:', error);
             }
+        }
+
+        function clearSearch() {
+            searchQuery = '';
+            document.getElementById('searchCustomer').value = '';
+            document.getElementById('filterTier').value = '';
+            if (customerAutocomplete) {
+                customerAutocomplete.clear();
+            }
+            loadAllAccounts();
         }
 
         function openRedeemModal(customerId, customerName, availablePoints) {

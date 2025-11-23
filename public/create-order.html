@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Create Order - HC-CMS</title>
     <link rel="stylesheet" href="/css/style.css">
+    <script src="/js/autocomplete.js"></script>
 </head>
 <body>
     <!-- Header -->
@@ -46,16 +47,14 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label class="form-label required" for="customerId">Customer</label>
-                        <select class="form-select" id="customerId" name="customerId" required>
-                            <option value="">Select Customer...</option>
-                        </select>
+                        <input type="text" class="form-input" id="customerSearch" placeholder="Type to search customer..." autocomplete="off">
+                        <input type="hidden" id="customerId" name="customerId" required>
                     </div>
 
                     <div class="form-group">
                         <label class="form-label required" for="branchId">Branch</label>
-                        <select class="form-select" id="branchId" name="branchId" required>
-                            <option value="">Select Branch...</option>
-                        </select>
+                        <input type="text" class="form-input" id="branchSearch" placeholder="Type to search branch..." autocomplete="off">
+                        <input type="hidden" id="branchId" name="branchId" required>
                     </div>
                 </div>
 
@@ -200,6 +199,8 @@
         let menuItems = [];
         let selectedCustomer = null;
         let loyaltyPoints = 0;
+        let customerAutocomplete;
+        let branchAutocomplete;
 
         // Format currency
         function formatCurrency(amount) {
@@ -230,12 +231,23 @@
                 const customersData = await customersRes.json();
                 customers = customersData.customers || [];
 
-                const customerSelect = document.getElementById('customerId');
-                customers.forEach(customer => {
-                    const option = document.createElement('option');
-                    option.value = customer.id;
-                    option.textContent = `${customer.name} (${customer.email || 'No email'})`;
-                    customerSelect.appendChild(option);
+                // Initialize customer autocomplete
+                customerAutocomplete = new Autocomplete(document.getElementById('customerSearch'), {
+                    data: customers,
+                    displayField: 'name',
+                    valueField: 'id',
+                    searchFields: ['name', 'email', 'phone'],
+                    placeholder: 'Type to search customer...',
+                    renderItem: (item) => `
+                        <div class="autocomplete-item">
+                            <div class="autocomplete-item-main">${item.name}</div>
+                            <div class="autocomplete-item-sub">${item.email || 'No email'} • ${item.phone || 'No phone'}</div>
+                        </div>
+                    `,
+                    onSelect: (item) => {
+                        document.getElementById('customerId').value = item.id;
+                        loadLoyaltyPoints(item.id);
+                    }
                 });
 
                 // Load branches
@@ -243,12 +255,23 @@
                 const branchesData = await branchesRes.json();
                 branches = branchesData.branches || [];
 
-                const branchSelect = document.getElementById('branchId');
-                branches.forEach(branch => {
-                    const option = document.createElement('option');
-                    option.value = branch.id;
-                    option.textContent = branch.name;
-                    branchSelect.appendChild(option);
+                // Initialize branch autocomplete
+                branchAutocomplete = new Autocomplete(document.getElementById('branchSearch'), {
+                    data: branches,
+                    displayField: 'name',
+                    valueField: 'id',
+                    searchFields: ['name', 'address'],
+                    placeholder: 'Type to search branch...',
+                    renderItem: (item) => `
+                        <div class="autocomplete-item">
+                            <div class="autocomplete-item-main">${item.name}</div>
+                            <div class="autocomplete-item-sub">${item.address}</div>
+                        </div>
+                    `,
+                    onSelect: (item) => {
+                        document.getElementById('branchId').value = item.id;
+                        loadMenuItems(item.id);
+                    }
                 });
 
             } catch (error) {
@@ -397,18 +420,6 @@
         });
 
         // Event listeners
-        document.getElementById('customerId').addEventListener('change', function() {
-            if (this.value) {
-                loadLoyaltyPoints(this.value);
-            }
-        });
-
-        document.getElementById('branchId').addEventListener('change', function() {
-            if (this.value) {
-                loadMenuItems(this.value);
-            }
-        });
-
         document.getElementById('loyaltyPointsToRedeem').addEventListener('input', calculateTotal);
 
         // Form submission
@@ -416,8 +427,19 @@
             e.preventDefault();
 
             const formData = new FormData(this);
-            const customerId = formData.get('customerId');
-            const branchId = formData.get('branchId');
+            const customerId = document.getElementById('customerId').value;
+            const branchId = document.getElementById('branchId').value;
+            
+            if (!customerId) {
+                showAlert('Please select a customer', 'error');
+                return;
+            }
+            
+            if (!branchId) {
+                showAlert('Please select a branch', 'error');
+                return;
+            }
+
             const paymentType = formData.get('paymentType');
             const loyaltyPointsToRedeem = parseInt(formData.get('loyaltyPointsToRedeem')) || 0;
 

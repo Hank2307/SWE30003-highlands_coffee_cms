@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inventory - HC-CMS</title>
     <link rel="stylesheet" href="/css/style.css">
+    <script src="/js/autocomplete.js"></script>
 </head>
 <body>
     <!-- Header -->
@@ -45,9 +46,7 @@
             <div class="form-row">
                 <div class="form-group">
                     <label class="form-label" for="filterBranch">Filter by Branch</label>
-                    <select class="form-select" id="filterBranch" onchange="loadInventory()">
-                        <option value="">All Branches</option>
-                    </select>
+                    <input type="text" class="form-input" id="filterBranch" placeholder="Type to search branch..." autocomplete="off">
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="filterCategory">Filter by Category</label>
@@ -62,8 +61,10 @@
                     <label class="form-label" for="filterStock">Stock Level</label>
                     <select class="form-select" id="filterStock" onchange="loadInventory()">
                         <option value="">All Stock Levels</option>
-                        <option value="low">Low Stock Only</option>
                         <option value="out">Out of Stock</option>
+                        <option value="low">Low Stock</option>
+                        <option value="normal">Normal Stock</option>
+                        <option value="sorted">Sort: Critical First</option>
                     </select>
                 </div>
             </div>
@@ -133,6 +134,8 @@
     <script>
         let allInventory = [];
         let branches = [];
+        let branchAutocomplete;
+        let selectedBranchId = '';
 
         function showAlert(message, type = 'success') {
             const alertContainer = document.getElementById('alertContainer');
@@ -152,16 +155,50 @@
                 const data = await response.json();
                 branches = data.branches || [];
 
-                const select = document.getElementById('filterBranch');
-                branches.forEach(branch => {
-                    const option = document.createElement('option');
-                    option.value = branch.id;
-                    option.textContent = branch.name;
-                    select.appendChild(option);
+                // Initialize branch autocomplete
+                branchAutocomplete = new Autocomplete(document.getElementById('filterBranch'), {
+                    data: branches,
+                    displayField: 'name',
+                    valueField: 'id',
+                    searchFields: ['name', 'address'],
+                    placeholder: 'Type to search branch...',
+                    renderItem: (item) => `
+                        <div class="autocomplete-item">
+                            <div class="autocomplete-item-main">${item.name}</div>
+                            <div class="autocomplete-item-sub">${item.address}</div>
+                        </div>
+                    `,
+                    onSelect: (item) => {
+                        selectedBranchId = item.id;
+                        loadInventory();
+                    }
                 });
             } catch (error) {
                 console.error('Error loading branches:', error);
             }
+        }
+
+        function getStockStatus(item) {
+            if (item.quantity === 0) return 'out';
+            if (item.quantity <= item.low_stock_threshold) return 'low';
+            return 'normal';
+        }
+
+        function sortInventoryByStock(inventory) {
+            return inventory.sort((a, b) => {
+                const statusA = getStockStatus(a);
+                const statusB = getStockStatus(b);
+                
+                // Priority: out > low > normal
+                const priority = { 'out': 0, 'low': 1, 'normal': 2 };
+                
+                if (priority[statusA] !== priority[statusB]) {
+                    return priority[statusA] - priority[statusB];
+                }
+                
+                // If same status, sort by quantity ascending
+                return a.quantity - b.quantity;
+            });
         }
 
         async function loadInventory() {

@@ -25,7 +25,7 @@ A full-stack café management system built with Node.js, Express, and SQLite.
 git clone https://github.com/Hank2307/SWE30003-highlands_coffee_cms
 cd hc-cms
 ```
-
+Make sure the folder's name is hc-cms!
 2. Install dependencies:
 ```bash
 npm install

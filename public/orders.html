@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Orders - HC-CMS</title>
     <link rel="stylesheet" href="/css/style.css">
+    <script src="/js/autocomplete.js"></script>
 </head>
 <body>
     <!-- Header -->
@@ -53,9 +54,30 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="filterBranch">Filter by Branch</label>
-                    <select class="form-select" id="filterBranch" onchange="loadOrders()">
-                        <option value="">All Branches</option>
+                    <input type="text" class="form-input" id="filterBranch" placeholder="Type to search branch..." autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="filterTime">Filter by Time</label>
+                    <select class="form-select" id="filterTime" onchange="loadOrders()">
+                        <option value="">All Time</option>
+                        <option value="today">Today</option>
+                        <option value="yesterday">Yesterday</option>
+                        <option value="week">This Week</option>
+                        <option value="month">This Month</option>
+                        <option value="custom">Custom Range</option>
                     </select>
+                </div>
+            </div>
+
+            <!-- Custom Date Range (hidden by default) -->
+            <div id="customDateRange" class="form-row hidden" style="margin-bottom: 1.5rem;">
+                <div class="form-group">
+                    <label class="form-label" for="startDate">Start Date</label>
+                    <input type="date" class="form-input" id="startDate" onchange="loadOrders()">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="endDate">End Date</label>
+                    <input type="date" class="form-input" id="endDate" onchange="loadOrders()">
                 </div>
             </div>
 
@@ -87,6 +109,8 @@
     <script>
         let allOrders = [];
         let branches = [];
+        let branchAutocomplete;
+        let selectedBranchId = '';
 
         function formatCurrency(amount) {
             return new Intl.NumberFormat('vi-VN', {
@@ -113,17 +137,90 @@
                 const data = await response.json();
                 branches = data.branches || [];
 
-                const select = document.getElementById('filterBranch');
-                branches.forEach(branch => {
-                    const option = document.createElement('option');
-                    option.value = branch.id;
-                    option.textContent = branch.name;
-                    select.appendChild(option);
+                // Initialize branch autocomplete
+                branchAutocomplete = new Autocomplete(document.getElementById('filterBranch'), {
+                    data: branches,
+                    displayField: 'name',
+                    valueField: 'id',
+                    searchFields: ['name', 'address'],
+                    placeholder: 'Type to search branch...',
+                    renderItem: (item) => `
+                        <div class="autocomplete-item">
+                            <div class="autocomplete-item-main">${item.name}</div>
+                            <div class="autocomplete-item-sub">${item.address}</div>
+                        </div>
+                    `,
+                    onSelect: (item) => {
+                        selectedBranchId = item.id;
+                        loadOrders();
+                    }
                 });
             } catch (error) {
                 console.error('Error loading branches:', error);
             }
         }
+
+        // Time filter helper functions
+        function getDateRange(filterValue) {
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            
+            switch(filterValue) {
+                case 'today':
+                    return { start: today, end: new Date() };
+                    
+                case 'yesterday':
+                    const yesterday = new Date(today);
+                    yesterday.setDate(yesterday.getDate() - 1);
+                    return { start: yesterday, end: today };
+                    
+                case 'week':
+                    const weekStart = new Date(today);
+                    weekStart.setDate(weekStart.getDate() - 7);
+                    return { start: weekStart, end: new Date() };
+                    
+                case 'month':
+                    const monthStart = new Date(today);
+                    monthStart.setMonth(monthStart.getMonth() - 1);
+                    return { start: monthStart, end: new Date() };
+                    
+                case 'custom':
+                    const startDate = document.getElementById('startDate').value;
+                    const endDate = document.getElementById('endDate').value;
+                    if (startDate && endDate) {
+                        return {
+                            start: new Date(startDate),
+                            end: new Date(endDate + 'T23:59:59')
+                        };
+                    }
+                    return null;
+                    
+                default:
+                    return null;
+            }
+        }
+
+        function filterByTime(orders, filterValue) {
+            if (!filterValue) return orders;
+            
+            const dateRange = getDateRange(filterValue);
+            if (!dateRange) return orders;
+            
+            return orders.filter(order => {
+                const orderDate = new Date(order.created_at);
+                return orderDate >= dateRange.start && orderDate <= dateRange.end;
+            });
+        }
+
+        // Show/hide custom date range
+        document.getElementById('filterTime').addEventListener('change', function() {
+            const customRange = document.getElementById('customDateRange');
+            if (this.value === 'custom') {
+                customRange.classList.remove('hidden');
+            } else {
+                customRange.classList.add('hidden');
+            }
+        });
 
         async function loadOrders() {
             try {
@@ -145,16 +242,23 @@
 
                 allOrders = data.orders;
 
-                // Apply filters
+                // Apply status filter
                 const statusFilter = document.getElementById('filterStatus').value;
-                const branchFilter = document.getElementById('filterBranch').value;
-
                 let filteredOrders = allOrders;
+                
                 if (statusFilter) {
                     filteredOrders = filteredOrders.filter(o => o.order_status === statusFilter);
                 }
-                if (branchFilter) {
-                    filteredOrders = filteredOrders.filter(o => o.branch_id == branchFilter);
+
+                // Apply branch filter
+                if (selectedBranchId) {
+                    filteredOrders = filteredOrders.filter(o => o.branch_id == selectedBranchId);
+                }
+
+                // Apply time filter
+                const timeFilter = document.getElementById('filterTime').value;
+                if (timeFilter) {
+                    filteredOrders = filterByTime(filteredOrders, timeFilter);
                 }
 
                 if (filteredOrders.length === 0) {
@@ -162,6 +266,7 @@
                         <div class="empty-state">
                             <div class="empty-state-icon">🔍</div>
                             <div class="empty-state-text">No orders match the selected filters</div>
+                            <button class="btn btn-secondary" onclick="clearFilters()">Clear Filters</button>
                         </div>
                     `;
                     return;
@@ -225,6 +330,19 @@
                 `;
                 console.error('Error loading orders:', error);
             }
+        }
+
+        function clearFilters() {
+            document.getElementById('filterStatus').value = '';
+            document.getElementById('filterTime').value = '';
+            document.getElementById('customDateRange').classList.add('hidden');
+            document.getElementById('startDate').value = '';
+            document.getElementById('endDate').value = '';
+            if (branchAutocomplete) {
+                branchAutocomplete.clear();
+            }
+            selectedBranchId = '';
+            loadOrders();
         }
 
         async function viewOrderDetails(orderId) {
