@@ -17,8 +17,27 @@ class OrderService {
       const { customerId, branchId, items, paymentType, paymentDetails, loyaltyPointsToRedeem } = orderData;
 
       // Validate inputs
-      if (!customerId || !branchId || !items || items.length === 0) {
+      if (!branchId || !items || items.length === 0) {
         throw new Error('Missing required order information');
+      }
+
+      // Check if guest order (no customer ID)
+      const isGuestOrder = !customerId || customerId === '';
+      
+      // For guest orders, create a temporary guest customer
+      let actualCustomerId = customerId;
+      if (isGuestOrder) {
+        const guestResult = await this.db.run(
+          'INSERT INTO customers (name, email, phone) VALUES (?, ?, ?)',
+          [`Guest-${Date.now()}`, null, null]
+        );
+        actualCustomerId = guestResult.lastID;
+        
+        // Create loyalty account for consistency (but won't be used)
+        await this.db.run(
+          'INSERT INTO loyalty_accounts (customer_id, points) VALUES (?, ?)',
+          [actualCustomerId, 0]
+        );
       }
 
       // Build order items and calculate total
@@ -66,10 +85,10 @@ class OrderService {
       let totalAmount = subtotal;
       let loyaltyDiscount = 0;
 
-      // Apply loyalty points if requested
-      if (loyaltyPointsToRedeem && loyaltyPointsToRedeem > 0) {
+      // Apply loyalty points if requested (only for registered customers)
+      if (!isGuestOrder && loyaltyPointsToRedeem && loyaltyPointsToRedeem > 0) {
         const redemptionResult = await this.loyaltyService.redeemPoints(
-          customerId,
+          actualCustomerId,
           loyaltyPointsToRedeem
         );
         loyaltyDiscount = redemptionResult.discountAmount;
@@ -81,7 +100,7 @@ class OrderService {
         `INSERT INTO orders 
          (customer_id, branch_id, total_amount, payment_type, payment_status, order_status) 
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [customerId, branchId, totalAmount, paymentType, 'pending', 'pending']
+        [actualCustomerId, branchId, totalAmount, paymentType, 'pending', 'pending']
       );
 
       const orderId = orderResult.lastID;
@@ -89,7 +108,7 @@ class OrderService {
       // Create order object
       const order = new Order(
         orderId,
-        customerId,
+        actualCustomerId,
         branchId,
         totalAmount,
         paymentType,
@@ -129,8 +148,11 @@ class OrderService {
       // Payment successful - update inventory
       await this.inventoryService.updateStock(orderItems, branchId);
 
-      // Add loyalty points (if not already redeemed)
-      const loyaltyResult = await this.loyaltyService.addPoints(customerId, totalAmount);
+      // Add loyalty points (only for registered customers, not guests)
+      let loyaltyResult = { pointsAdded: 0, newBalance: 0 };
+      if (!isGuestOrder) {
+        loyaltyResult = await this.loyaltyService.addPoints(actualCustomerId, totalAmount);
+      }
 
       // Update order status to confirmed
       await this.db.run(
@@ -139,17 +161,20 @@ class OrderService {
       );
 
       // Get customer and branch details for notification
-      const customer = await this.db.get('SELECT name FROM customers WHERE id = ?', [customerId]);
+      const customer = await this.db.get('SELECT name FROM customers WHERE id = ?', [actualCustomerId]);
       const branch = await this.db.get('SELECT name FROM branches WHERE id = ?', [branchId]);
 
       // Create order confirmation notification
       this.notificationService.createOrderConfirmation(order, customer.name, branch.name);
       this.notificationService.createPaymentConfirmation(paymentResult, orderId, totalAmount);
-      this.notificationService.createLoyaltyUpdate(
-        customerId,
-        loyaltyResult.pointsAdded,
-        loyaltyResult.newBalance
-      );
+      
+      if (!isGuestOrder && loyaltyResult.pointsAdded > 0) {
+        this.notificationService.createLoyaltyUpdate(
+          actualCustomerId,
+          loyaltyResult.pointsAdded,
+          loyaltyResult.newBalance
+        );
+      }
 
       return {
         success: true,
@@ -157,7 +182,8 @@ class OrderService {
         payment: paymentResult,
         loyalty: loyaltyResult,
         loyaltyDiscount: loyaltyDiscount,
-        message: 'Order created successfully'
+        isGuest: isGuestOrder,
+        message: isGuestOrder ? 'Guest order created successfully' : 'Order created successfully'
       };
     } catch (error) {
       console.error('Error creating order:', error);

@@ -46,9 +46,10 @@
                 <!-- Customer & Branch Selection -->
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label required" for="customerId">Customer</label>
-                        <input type="text" class="form-input" id="customerSearch" placeholder="Type to search customer..." autocomplete="off">
-                        <input type="hidden" id="customerId" name="customerId" required>
+                        <label class="form-label" for="customerId">Customer</label>
+                        <input type="text" class="form-input" id="customerSearch" placeholder="Type to search customer or leave empty for guest..." autocomplete="off">
+                        <input type="hidden" id="customerId" name="customerId">
+                        <small class="text-muted">💡 Leave empty for guest checkout (no loyalty points)</small>
                     </div>
 
                     <div class="form-group">
@@ -60,14 +61,17 @@
 
                 <!-- Loyalty Points Section -->
                 <div class="form-group">
-                    <div class="card" style="background-color: #f8f9fa;">
+                    <div class="card" style="background-color: #f8f9fa;" id="loyaltyCard">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
                                 <strong>Loyalty Points Available:</strong>
                                 <span id="loyaltyPointsDisplay">-</span>
                                 <span class="text-muted" id="loyaltyValueDisplay"></span>
+                                <div id="guestMode" class="hidden" style="color: #6c757d; margin-top: 0.5rem;">
+                                    🎫 <em>Guest mode - No loyalty points will be earned or redeemed</em>
+                                </div>
                             </div>
-                            <div>
+                            <div id="redeemSection">
                                 <label class="form-label" for="loyaltyPointsToRedeem">Redeem Points:</label>
                                 <input 
                                     type="number" 
@@ -201,6 +205,7 @@
         let loyaltyPoints = 0;
         let customerAutocomplete;
         let branchAutocomplete;
+        let isGuestMode = true; // Start in guest mode
 
         // Format currency
         function formatCurrency(amount) {
@@ -218,10 +223,36 @@
                     <strong>${type === 'error' ? 'Error:' : 'Success:'}</strong> ${message}
                 </div>
             `;
+            window.scrollTo(0, 0);
             setTimeout(() => {
                 alertContainer.innerHTML = '';
             }, 5000);
         }
+
+        // Toggle guest/customer mode
+        function setGuestMode(isGuest) {
+            isGuestMode = isGuest;
+            const guestModeDiv = document.getElementById('guestMode');
+            const redeemSection = document.getElementById('redeemSection');
+            const loyaltyDisplay = document.getElementById('loyaltyPointsDisplay');
+            const loyaltyValue = document.getElementById('loyaltyValueDisplay');
+
+            if (isGuest) {
+                guestModeDiv.classList.remove('hidden');
+                redeemSection.classList.add('hidden');
+                loyaltyDisplay.textContent = 'N/A';
+                loyaltyValue.textContent = '';
+                document.getElementById('loyaltyPointsToRedeem').value = 0;
+                document.getElementById('loyaltyPointsToRedeem').disabled = true;
+            } else {
+                guestModeDiv.classList.add('hidden');
+                redeemSection.classList.remove('hidden');
+                document.getElementById('loyaltyPointsToRedeem').disabled = false;
+            }
+        }
+
+        // Initialize guest mode
+        setGuestMode(true);
 
         // Load customers and branches
         async function loadInitialData() {
@@ -237,7 +268,7 @@
                     displayField: 'name',
                     valueField: 'id',
                     searchFields: ['name', 'email', 'phone'],
-                    placeholder: 'Type to search customer...',
+                    placeholder: 'Type to search customer or leave empty for guest...',
                     renderItem: (item) => `
                         <div class="autocomplete-item">
                             <div class="autocomplete-item-main">${item.name}</div>
@@ -246,7 +277,16 @@
                     `,
                     onSelect: (item) => {
                         document.getElementById('customerId').value = item.id;
+                        setGuestMode(false);
                         loadLoyaltyPoints(item.id);
+                    }
+                });
+
+                // Handle clearing customer (back to guest mode)
+                document.getElementById('customerSearch').addEventListener('input', function() {
+                    if (this.value.trim() === '') {
+                        document.getElementById('customerId').value = '';
+                        setGuestMode(true);
                     }
                 });
 
@@ -430,18 +470,16 @@
             const customerId = document.getElementById('customerId').value;
             const branchId = document.getElementById('branchId').value;
             
-            if (!customerId) {
-                showAlert('Please select a customer', 'error');
-                return;
-            }
-            
             if (!branchId) {
                 showAlert('Please select a branch', 'error');
                 return;
             }
 
             const paymentType = formData.get('paymentType');
-            const loyaltyPointsToRedeem = parseInt(formData.get('loyaltyPointsToRedeem')) || 0;
+            
+            // Guest mode: no customer ID or loyalty points
+            const isGuest = !customerId || customerId === '';
+            const loyaltyPointsToRedeem = isGuest ? 0 : (parseInt(formData.get('loyaltyPointsToRedeem')) || 0);
 
             // Collect order items
             const items = [];
@@ -495,17 +533,16 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    showAlert(`✅ Order #${data.order.id} created successfully! Redirecting...`, 'success');
-                    
                     // Show success details
                     const alertContainer = document.getElementById('alertContainer');
                     alertContainer.innerHTML = `
                         <div class="alert alert-success">
                             <h4>✅ Order Created Successfully!</h4>
+                            ${data.isGuest ? '<p><strong>Guest Order</strong> - No loyalty points earned</p>' : ''}
                             <p><strong>Order ID:</strong> #${data.order.id}</p>
                             <p><strong>Total Amount:</strong> ${formatCurrency(data.order.totalAmount)}</p>
                             <p><strong>Payment Status:</strong> ${data.payment.message}</p>
-                            ${data.loyalty.pointsAdded > 0 ? `<p><strong>Loyalty Points Earned:</strong> +${data.loyalty.pointsAdded} points</p>` : ''}
+                            ${!data.isGuest && data.loyalty.pointsAdded > 0 ? `<p><strong>Loyalty Points Earned:</strong> +${data.loyalty.pointsAdded} points</p>` : ''}
                             ${data.loyaltyDiscount > 0 ? `<p><strong>Loyalty Discount Applied:</strong> ${formatCurrency(data.loyaltyDiscount)}</p>` : ''}
                             <p class="mt-2">Redirecting to orders page in 3 seconds...</p>
                         </div>
